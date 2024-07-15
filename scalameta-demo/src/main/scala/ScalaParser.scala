@@ -1,42 +1,59 @@
 import scala.meta._
+import scala.meta.contrib._
+import scala.meta.contrib.DocToken._
+//import scala.meta.contrib.DocToken.{Description, Param, TParam, _}
+import scala.meta.tokens.Token.Comment
 
-object ScalaParser extends App {
+object ScalaParser {
+
+  def parseAndExtractInfo(source: String): (List[String],  List[String], List[String], List[String]) = {
+    val parsed: Source = source.parse[Source].get
+
+    val comments = parsed.tokens.collect {
+      case comment: Comment if comment.syntax.startsWith("/**") =>
+        ScaladocParser.parseScaladoc(comment).getOrElse(Nil)
+    }.flatten.toList
+
+    val descriptions = comments.collect {
+      case DocToken(Description, content, _) => content
+    }.flatten.toList
+
+    val params = comments.collect {
+      case DocToken(Param, name, desc) => s"@$name: $desc"
+    }.toList
+
+
+    val functions = parsed.collect {
+      case Defn.Def(_, name, _, _, _, _) => name.value
+    }.toList
+
+    val classes = parsed.collect {
+      case Defn.Class(_, name, _, _, _) => name.value
+    }.toList
+
+    (descriptions, params,  functions, classes)
+  }
+}
+
+object HelloWorld extends App {
+  println("Welcome to Standard Scaladoc Parser")
 
   val source = """
-    // This is a comment
-    object Main extends App {
-      def sum(a: Int, b: Int): Int = a + b
-    
-      def greet(name: String): Unit = println(s"Hello, $name!")
-    } 
-    """
+    /** This is a Scaladoc comment
+      * @param a The first parameter
+      * @param b The second parameter
+      */
 
-  // Parse the source into a Source object
-  val tree = source.parse[Source].get
+      class sample{}
+    object Main {
+      def sum[T](a: Int, b: Int): Int = a + b
+    }
+  """
 
-  // Extract comments from the source string
-  val comments = tree.tokens.collect {
-    case Token.Comment(value) => value.trim
-  }
+  val (descriptions, params,  functions, classes) = ScalaParser.parseAndExtractInfo(source)
 
-  // Extract function definitions from the source tree
-  val functions = tree.collect {
-    case q"..$mods def $fname(..$params): $returnType = $_" =>
-      val paramList = params.map {
-        case param"..$mods $name: $tpe" => s"${name.syntax}: ${tpe.toString}"
-      }
-      (fname.syntax, paramList)
-  }
-
-  // Print extracted comments
-  println("Comments:")
-  comments.foreach(println)
-
-  // Print extracted function names and parameters
-  println("\nFunctions:")
-  functions.foreach { case (fname, params) =>
-    println(s"Function: $fname")
-    println(s"Parameters: ${params.mkString(", ")}")
-    println()
-  }
+  println(s"Descriptions: ${descriptions.mkString("\n")}")
+  println(s"Params: ${params.mkString("\n")}")
+  println(s"Functions: ${functions.mkString(", ")}")
+  println(s"Classes: ${classes.mkString(", ")}")
 }
