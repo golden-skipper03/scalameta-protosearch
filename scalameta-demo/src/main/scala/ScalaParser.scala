@@ -1,7 +1,6 @@
 import scala.meta._
 import scala.meta.contrib._
 import scala.meta.contrib.DocToken._
-//import scala.meta.contrib.DocToken.{Description, Param, TParam, _}
 import scala.meta.tokens.Token.Comment
 
 object ScalaParser {
