@@ -30,7 +30,7 @@ object ScalaParser {
         val tokens = comments(lastComment)._2
         
         val descriptions = tokens.collect {
-          case DocToken(Description, content, _) => content.getOrElse("")
+          case DocToken(Description,name, body) => body
         }.mkString(" ")
 
         val params = tokens.collect {
