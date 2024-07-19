@@ -10,44 +10,35 @@ object ScalaParser {
   def parseAndExtractInfo(source: String): Map[String, ScaladocInfo] = {
     val parsed: Source = source.parse[Source].get
 
-    val comments = parsed.tokens.collect {
+    val allComments = parsed.tokens.collect {
       case comment: Comment if comment.syntax.startsWith("/**") =>
-        (comment.pos.startLine, ScaladocParser.parseScaladoc(comment).getOrElse(Nil))
-    }
+        (comment.pos.start, ScaladocParser.parseScaladoc(comment).getOrElse(Nil))
+    }.toMap
 
     val functions = parsed.collect {
-      case defn @ Defn.Def(_, name, _, _, _, _) => (name.value, defn.pos.startLine)
-    }
+      case defn @ Defn.Def(_, name, _, _, _, _) =>
+        val comments = allComments
+          .filter { case (start, _) => start < defn.pos.start }
+          .maxByOption(_._1)
+          .map(_._2)
+          .getOrElse(Nil)
 
-    var scaladocInfoMap = Map[String, ScaladocInfo]()
-
-    var lastComment = -1
-    functions.foreach { case (functionName, functionLine) =>
-      while (lastComment + 1 < comments.length && comments(lastComment + 1)._1 < functionLine) {
-        lastComment += 1
-      }
-      if (lastComment >= 0) {
-        val tokens = comments(lastComment)._2
-        
-        val descriptions = tokens.collect {
-          case DocToken(Description,name, body) => body
+        val description = comments.collect {
+          case DocToken(Description, _, body) => body
         }.mkString(" ")
 
-        val params = tokens.collect {
+        val params = comments.collect {
           case DocToken(Param, Some(name), desc) => s"@$name: ${desc.getOrElse("")}"
         }
 
-        val tparams = tokens.collect {
+        val tparams = comments.collect {
           case DocToken(TypeParam, Some(name), desc) => s"@tparam $name: ${desc.getOrElse("")}"
         }
 
-        scaladocInfoMap += (functionName -> ScaladocInfo(descriptions, params, tparams))
-      } else {
-        scaladocInfoMap += (functionName -> ScaladocInfo("", Nil, Nil))
-      }
-    }
+        name.value -> ScaladocInfo(description, params, tparams)
+    }.toMap
 
-    scaladocInfoMap
+    functions
   }
 }
 
@@ -63,6 +54,7 @@ object HelloWorld extends App {
         * This function sums two integers.
         * @param a The first parameter
         * @param b The second parameter
+        * @tparam T The type parameter
         */
       def sum[T](a: Int, b: Int): Int = a + b
 
@@ -76,6 +68,7 @@ object HelloWorld extends App {
         * This function subtracts two integers.
         * @param c The first parameter to subtract
         * @param d The second parameter to subtract
+        * @tparam T The type parameters
         */
       def subtract[T](c: Int, d: Int): Int = c - d
     }
