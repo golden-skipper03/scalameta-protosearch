@@ -2,84 +2,99 @@ import scala.meta._
 import scala.meta.contrib._
 import scala.meta.contrib.DocToken._
 import scala.meta.tokens.Token.Comment
-
-case class ScaladocInfo(description: String, params: List[String], tparams: List[String])
+import scala.util.matching.Regex
+// Case class to hold function information along with its Scaladoc
+case class EnhancedDefnDef(
+  name: String,
+  params: List[String],
+  tparams: List[String],
+  description: String,
+    annotations: List[String],
+  hyperlinks: List[String],
+  originalDefn: Defn.Def
+)
 
 object ScalaParser {
 
-  def parseAndExtractInfo(source: String): Map[String, ScaladocInfo] = {
+  def parseAndExtractInfo(source: String): List[EnhancedDefnDef] = {
     val parsed: Source = source.parse[Source].get
 
-    val allComments = parsed.tokens.collect {
+    // Regular expression to match hyperlinks in the format [text](url)
+    val hyperlinkRegex: Regex = """\[(.*?)\]\((.*?)\)""".r
+
+    // Extract comments and their positions
+    val comments = parsed.tokens.collect {
       case comment: Comment if comment.syntax.startsWith("/**") =>
         (comment.pos.start, ScaladocParser.parseScaladoc(comment).getOrElse(Nil))
     }.toMap
 
+    // Traverse the AST to find functions and their associated comments
     val functions = parsed.collect {
       case defn @ Defn.Def(_, name, _, _, _, _) =>
-        val comments = allComments
-          .filter { case (start, _) => start < defn.pos.start }
-          .maxByOption(_._1)
-          .map(_._2)
-          .getOrElse(Nil)
+    // Find the closest preceding comment
+val (commentTokens, rawComment): (List[DocToken], String) = comments
+  .filter { case (start, _) => start < defn.pos.start }
+  .maxByOption(_._1)
+  .map { case (_, tokens) =>
+    val raw = tokens.collect {
+      case DocToken(_, _, Some(body)) => body
+    }.mkString(" ")
+    (tokens, raw)
+  }
+  .getOrElse((Nil, ""))
 
-        val description = comments.collect {
-          case DocToken(Description, _, body) => body
+  //.getOrElse(Nil,"")
+
+        val description = commentTokens.collect {
+          case DocToken(Description, _, Some(body)) => body
         }.mkString(" ")
 
-        val params = comments.collect {
-          case DocToken(Param, Some(name), desc) => s"@$name: ${desc.getOrElse("")}"
+        val params = commentTokens.collect {
+          case DocToken(Param, Some(name), Some(desc)) => s"@$name: $desc"
         }
 
-        val tparams = comments.collect {
-          case DocToken(TypeParam, Some(name), desc) => s"@tparam $name: ${desc.getOrElse("")}"
+        val tparams = commentTokens.collect {
+          case DocToken(TypeParam, Some(name), Some(desc)) => s"@tparam $name: $desc"
         }
 
-        name.value -> ScaladocInfo(description, params, tparams)
-    }.toMap
+        // Extract annotations associated with the function
+        val annotations = defn.mods.collect {
+          case mod: Mod.Annot => mod.toString
+        } 
+        // Extract hyperlinks from the raw Scaladoc comment using regex
+        val hyperlinks = hyperlinkRegex.findAllMatchIn(rawComment).map { m =>
+          s"[${m.group(1)}](${m.group(2)})"
+        }.toList
+        EnhancedDefnDef(name.value, params, tparams, description, annotations, hyperlinks, defn)
+    }
 
     functions
   }
 }
 
 object HelloWorld extends App {
-  println("Welcome to Standard Scaladoc Parser")
+  println("Welcome to Enhanced Scaladoc Parser")
 
-  val source = """
-    /** This is a Scaladoc comment
-      * This is a description for the object Main.
-      */
-    object Main {
-      /** 
-        * This function sums two integers.
-        * @param a The first parameter
-        * @param b The second parameter
-        * @tparam T The type parameter
-        */
-      def sum[T](a: Int, b: Int): Int = a + b
+  
 
-      /** 
-        * This function greets the user.
-        * @param name The name parameter
-        */
-      def greet(name: String): Unit = println(s"Hello, $name!")
+  
+  val fileName = "E:/Gsoc/scalameta-demo/scalameta-demo/src/main/scala/data.scala"
+  val bufferedSource = scala.io.Source.fromFile(fileName)
+  //val text = bufferedSource.getLines().mkString
+  val text = bufferedSource.mkString
+  bufferedSource.close()
+  // println(s"File content:\n$text")
 
-      /** 
-        * This function subtracts two integers.
-        * @param c The first parameter to subtract
-        * @param d The second parameter to subtract
-        * @tparam T The type parameters
-        */
-      def subtract[T](c: Int, d: Int): Int = c - d
-    }
-  """
+  val scaladocInfoList = ScalaParser.parseAndExtractInfo(text)
 
-  val scaladocInfoMap = ScalaParser.parseAndExtractInfo(source)
-
-  scaladocInfoMap.foreach { case (functionName, info) =>
-    println(s"Function: $functionName")
+  scaladocInfoList.foreach { info =>
+    println(s"Function: ${info.name}")
     println(s"  Description: ${info.description}")
     println(s"  Params: ${info.params.mkString(", ")}")
     println(s"  Type Params: ${info.tparams.mkString(", ")}")
+    println(s"  Annotations: ${info.annotations.mkString(", ")}")
+    println(s"  Hyperlinks: ${info.hyperlinks.mkString(", ")}")
   }
+
 }
+
