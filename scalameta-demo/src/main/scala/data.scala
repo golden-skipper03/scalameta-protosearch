@@ -2,6 +2,11 @@
       * This is a description for the object Main.
       */
     object Main {
+          /** This is a class representing a person
+      * @param name The name of the person
+      * @param age The age of the person
+      */
+
       /** 
         * This function sums two integers.
         * @param a The first parameter
@@ -10,7 +15,7 @@
         * For more information, visit [Sum Function](https://example.com/sum-function).
         */
       @deprecated("Use add instead", "1.0")
-      def sum[T](a: Int, b: Int): Int = a + b
+      def sum[T](a: Int, b: Int=1): Int = a + b
 
          /** 
         * This function greets the user.

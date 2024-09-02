@@ -11,7 +11,8 @@ case class EnhancedDefnDef(
   description: String,
     annotations: List[String],
   hyperlinks: List[String],
-  originalDefn: Defn.Def
+  optionalParams: List[String],
+    originalDefn: Defn.Def
 )
 
 object ScalaParser {
@@ -30,20 +31,18 @@ object ScalaParser {
 
     // Traverse the AST to find functions and their associated comments
     val functions = parsed.collect {
-      case defn @ Defn.Def(_, name, _, _, _, _) =>
-    // Find the closest preceding comment
-val (commentTokens, rawComment): (List[DocToken], String) = comments
-  .filter { case (start, _) => start < defn.pos.start }
-  .maxByOption(_._1)
-  .map { case (_, tokens) =>
-    val raw = tokens.collect {
-      case DocToken(_, _, Some(body)) => body
-    }.mkString(" ")
-    (tokens, raw)
-  }
-  .getOrElse((Nil, ""))
+        case defn @ Defn.Def(mods, name, tparams, paramss, _, _) =>
+      val (commentTokens, rawComment): (List[DocToken], String) = comments
+        .filter { case (start, _) => start < defn.pos.start }
+        .maxByOption(_._1)
+        .map { case (_, tokens) =>
+          val raw = tokens.collect {
+            case DocToken(_, _, Some(body)) => body
+          }.mkString(" ")
+          (tokens, raw)
+        }
+        .getOrElse((Nil, ""))
 
-  //.getOrElse(Nil,"")
 
         val description = commentTokens.collect {
           case DocToken(Description, _, Some(body)) => body
@@ -57,15 +56,20 @@ val (commentTokens, rawComment): (List[DocToken], String) = comments
           case DocToken(TypeParam, Some(name), Some(desc)) => s"@tparam $name: $desc"
         }
 
-        // Extract annotations associated with the function
+        
         val annotations = defn.mods.collect {
           case mod: Mod.Annot => mod.toString
         } 
-        // Extract hyperlinks from the raw Scaladoc comment using regex
+        
         val hyperlinks = hyperlinkRegex.findAllMatchIn(rawComment).map { m =>
           s"[${m.group(1)}](${m.group(2)})"
         }.toList
-        EnhancedDefnDef(name.value, params, tparams, description, annotations, hyperlinks, defn)
+
+        val optionalParams = paramss.flatten.collect {
+          case param: Term.Param if param.default.isDefined => param.name.value
+        }
+
+        EnhancedDefnDef(name.value, params, tparams, description, annotations, hyperlinks,optionalParams, defn)
     }
 
     functions
@@ -75,9 +79,6 @@ val (commentTokens, rawComment): (List[DocToken], String) = comments
 object HelloWorld extends App {
   println("Welcome to Enhanced Scaladoc Parser")
 
-  
-
-  
   val fileName = "E:/Gsoc/scalameta-demo/scalameta-demo/src/main/scala/data.scala"
   val bufferedSource = scala.io.Source.fromFile(fileName)
   //val text = bufferedSource.getLines().mkString
@@ -94,6 +95,7 @@ object HelloWorld extends App {
     println(s"  Type Params: ${info.tparams.mkString(", ")}")
     println(s"  Annotations: ${info.annotations.mkString(", ")}")
     println(s"  Hyperlinks: ${info.hyperlinks.mkString(", ")}")
+    println(s"  Optional Params: ${info.optionalParams.mkString(", ")}")
   }
 
 }
