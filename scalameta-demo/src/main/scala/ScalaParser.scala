@@ -46,14 +46,23 @@ object ScalaParser {
         case DocToken(Description, _, Some(body)) => body
       }.mkString(" ")
 
-      val typeParams = tparams.map { tparam =>
-        tparam.name.value
+      val paramsComm  = commentTokens.collect {
+        case DocToken(Param, Some(name), Some(desc)) => s"$name: $desc"
       }
 
       val params = paramss.flatten.map { param =>
-        s"${param.name.value}: ${param.decltpe.map(_.toString).getOrElse("Unknown Type")}"
+        s"${paramsComm.find(_.startsWith(""+param.name.value)).getOrElse(param.name.value)}: ${param.decltpe.map(_.toString).getOrElse("Unknown Type")} " 
       }
 
+      val typeParamsComm= commentTokens.collect {
+        case DocToken(TypeParam, Some(name), Some(desc)) => s"@tparam $name: $desc"
+      }
+
+      val typeParams = tparams.zipWithIndex.map { case (tparam, index)    =>
+        val value = typeParamsComm.lift(index).getOrElse(tparam.name.value)
+        s"${value.replace("@tparam", "")}"
+      }
+      
       val annotations = defn.mods.collect {
         case mod: Mod.Annot => mod.toString
       }
