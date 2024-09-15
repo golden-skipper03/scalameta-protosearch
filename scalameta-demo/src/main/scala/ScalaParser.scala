@@ -12,7 +12,7 @@ case class EnhancedDefnDef(
   params  : List[String],
   returnType: String,
   originalDefn: Defn.Def,
-  FilePath: String,
+  functionSource: String,
 )
 
 object ScalaParser {
@@ -137,6 +137,6 @@ object HelloWorld extends App {
     println(s"  Hyperlinks: ${info.hyperlinks.mkString(", ")}")
     println(s"  params: ${info.params.mkString(", ")}")
     println(s"  Return Type: ${info.returnType}")
-    println(s"  url: ${info.FilePath}")
+    println(s"  url: ${info.functionSource}")
   }
 }
