@@ -6,14 +6,13 @@ import scala.util.matching.Regex
 
 case class EnhancedDefnDef(
   name: String,
-  params: List[String],
-  tparams: List[String],
   description: String,
   annotations: List[String],
   hyperlinks: List[String],
-  optionalParams: List[String],
-  implicitParams: List[String],
-  originalDefn: Defn.Def
+  params  : List[String],
+  returnType: String,
+  originalDefn: Defn.Def,
+  FilePath: String,
 )
 
 object ScalaParser {
@@ -29,8 +28,22 @@ object ScalaParser {
         (comment.pos.start, ScaladocParser.parseScaladoc(comment).getOrElse(Nil))
     }.toMap
 
+    val sortedComments = comments.toList.sortBy(_._1)
+
+    val firstComment = sortedComments.headOption
+
+    val FilePathComment = firstComment
+      .map { case (start, commentTokens) =>
+        commentTokens.collect {
+          case DocToken(_, _, Some(body)) => body
+        }.mkString(" ")
+      }
+      .getOrElse("No comments found.")
+
+    val url="https://github.com/"+FilePathComment+"#L"
+
     val functions = parsed.collect {
-      case defn @ Defn.Def(mods, name, tparams, paramss, _, _) =>
+      case defn @ Defn.Def(mods, name, tparams, paramss, retType, _) =>
       val (commentTokens, rawComment): (List[DocToken], String) = comments
         .filter { case (start, _) => start < defn.pos.start }
         .maxByOption(_._1)
@@ -41,6 +54,10 @@ object ScalaParser {
           (tokens, raw)
         }
         .getOrElse((Nil, ""))
+
+        
+      val startLine = defn.pos.startLine;      
+      val endLine = defn.pos.endLine;  
 
       val description = commentTokens.collect {
         case DocToken(Description, _, Some(body)) => body
@@ -79,17 +96,23 @@ object ScalaParser {
             case param: Term.Param => param.name.value
           }
       }.flatten
+     
+      val allParams = optionalParams ++ typeParams ++ implicitParams 
+
+      val returnType = retType match {
+        case Some(tpe) => tpe.syntax
+        case None => "Unit"
+      }
 
       EnhancedDefnDef(
         name.value,
-        params,
-        typeParams,
         description , 
         annotations,
-        hyperlinks , 
-        optionalParams,
-        implicitParams,
-        originalDefn = defn
+        hyperlinks ,
+        allParams,
+        returnType,
+        originalDefn = defn,
+        url+startLine
       )
     }
 
@@ -110,11 +133,10 @@ object HelloWorld extends App {
   scaladocInfoList.foreach { info =>
     println(s"Function: ${info.name}")
     println(s"  Description: ${info.description}")
-    println(s"  Params: ${info.params.mkString(", ")}")
-    println(s"  Type Params: ${info.tparams.mkString(", ")}")
     println(s"  Annotations: ${info.annotations.mkString(", ")}")
     println(s"  Hyperlinks: ${info.hyperlinks.mkString(", ")}")
-    println(s"  Optional Params: ${info.optionalParams.mkString(", ")}")
-    println(s"  Implicit Params: ${info.implicitParams.mkString(", ")}")
+    println(s"  params: ${info.params.mkString(", ")}")
+    println(s"  Return Type: ${info.returnType}")
+    println(s"  url: ${info.FilePath}")
   }
 }
